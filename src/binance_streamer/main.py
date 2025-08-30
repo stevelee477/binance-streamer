@@ -62,7 +62,6 @@ def show_status():
         
         print(f"当前模式: {config_manager._config.get('mode', 'development')}")
         print(f"运行时长: {mode_config.run_duration} 秒")
-        print(f"最大工作进程数: {mode_config.max_workers}")
         print(f"启用的交易对数量: {len(mode_config.symbols)}")
         print(f"数据输出目录: {storage_config.get('output_directory', './data')}")
         print(f"队列最大大小: {performance_config.get('queue_maxsize', 10000)}")
@@ -128,7 +127,6 @@ def main():
         print(f"模式: {config_manager._config.get('mode', 'development')}")
         print(f"配置文件: {args.config}")
         print(f"交易对数量: {len(mode_config.symbols)}")
-        print(f"最大进程数: {mode_config.max_workers}")
         print(f"运行时长: {mode_config.run_duration} 秒")
         print("=" * 30)
         

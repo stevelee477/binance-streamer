@@ -136,13 +136,15 @@ class ProcessManager:
             self.writer_process.start()
             self.logger.info(f"已启动写入进程，PID: {self.writer_process.pid}")
             
-            # 启动各个交易对的数据收集进程
-            for symbol_config in self.config.symbols:
-                if symbol_config.enabled:
-                    self._start_symbol_process(
-                        symbol_config.symbol,
-                        symbol_config.streams
-                    )
+            # 启动所有启用的交易对进程
+            enabled_symbols = [sc for sc in self.config.symbols if sc.enabled]
+            self.logger.info(f"发现 {len(enabled_symbols)} 个启用的交易对")
+            
+            for symbol_config in enabled_symbols:
+                self._start_symbol_process(
+                    symbol_config.symbol,
+                    symbol_config.streams
+                )
             
             self.logger.info(f"总计启动了 {len(self.processes)} 个数据收集进程")
             

@@ -17,7 +17,6 @@ class SymbolConfig:
 @dataclass
 class ModeConfig:
     run_duration: int
-    max_workers: int
     symbols: List[SymbolConfig]
 
 class ConfigManager:
@@ -57,7 +56,6 @@ class ConfigManager:
         
         return ModeConfig(
             run_duration=mode_config['run_duration'],
-            max_workers=mode_config['max_workers'],
             symbols=symbols
         )
     
