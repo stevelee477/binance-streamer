@@ -12,6 +12,7 @@ from .config import config_manager
 from .websocket_client import binance_websocket_client
 from .data_fetcher import get_depth_snapshot
 from .file_writer import writer_process
+from .orderbook_process import run_orderbook_manager_process
 import aiohttp
 
 def _symbol_worker_process(symbol: str, streams: List[str], data_queue, network_config: Dict, performance_config: Dict):
@@ -65,11 +66,13 @@ class ProcessManager:
         self.config = config_manager.get_current_mode_config()
         self.network_config = config_manager.get_network_config()
         self.performance_config = config_manager.get_performance_config()
+        self.orderbook_config = config_manager.get_orderbook_config()
         self.processes: List[Process] = []
         self.data_queue = multiprocessing.Queue(
             maxsize=self.performance_config.get('queue_maxsize', 10000)
         )
         self.writer_process = None
+        self.orderbook_process = None
         self.running = False
         
         # 设置信号处理
@@ -148,6 +151,17 @@ class ProcessManager:
             
             self.logger.info(f"总计启动了 {len(self.processes)} 个数据收集进程")
             
+            # 启动订单簿管理进程（如果启用）
+            if self.orderbook_config.get('enabled', False):
+                symbol_names = [sc.symbol for sc in enabled_symbols]
+                self.orderbook_process = Process(
+                    target=run_orderbook_manager_process,
+                    args=(symbol_names, self.orderbook_config, self.network_config, self.data_queue),
+                    name="orderbook_manager"
+                )
+                self.orderbook_process.start()
+                self.logger.info(f"已启动订单簿管理进程，PID: {self.orderbook_process.pid}")
+            
             # 监控进程运行
             self._monitor_processes()
             
@@ -193,6 +207,12 @@ class ProcessManager:
                     )
                     self.writer_process.start()
                 
+                # 检查订单簿管理进程
+                if (self.orderbook_process and 
+                    self.orderbook_config.get('enabled', False) and 
+                    not self.orderbook_process.is_alive()):
+                    self.logger.warning("订单簿管理进程已退出，不重新启动（避免频繁重启）")
+                
                 time.sleep(1)  # 监控间隔
                 
         except KeyboardInterrupt:
@@ -235,6 +255,17 @@ class ProcessManager:
                 self.logger.warning("强制终止写入进程")
                 self.writer_process.terminate()
                 self.writer_process.join()
+        
+        # 关闭订单簿管理进程
+        if self.orderbook_process and self.orderbook_process.is_alive():
+            self.logger.info("关闭订单簿管理进程...")
+            self.orderbook_process.terminate()
+            self.orderbook_process.join(timeout=10)
+            
+            if self.orderbook_process.is_alive():
+                self.logger.warning("强制杀死订单簿管理进程")
+                self.orderbook_process.kill()
+                self.orderbook_process.join()
         
         self.logger.info("所有进程已关闭")
     

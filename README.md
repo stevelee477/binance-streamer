@@ -16,7 +16,7 @@
 ### 1. 安装依赖
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 2. 配置文件
@@ -49,20 +49,23 @@ modes:
 ### 3. 运行程序
 
 ```bash
+# 安装依赖（使用uv）
+uv sync
+
 # 基本启动
-python main.py
+uv run python -m binance_streamer.main
 
 # 使用自定义配置文件
-python main.py -c custom_config.yaml
+uv run python -m binance_streamer.main -c custom_config.yaml
 
 # 查看配置状态
-python main.py --status
+uv run python -m binance_streamer.main --status
 
 # 列出配置的交易对
-python main.py --list-symbols
+uv run python -m binance_streamer.main --list-symbols
 
 # 详细日志输出
-python main.py -v
+uv run python -m binance_streamer.main -v
 ```
 
 ## 配置说明
@@ -71,7 +74,13 @@ python main.py -v
 
 - `mode`: 运行模式（development/production）
 - `run_duration`: 运行时长（秒，0表示无限运行）
-- `max_workers`: 最大工作进程数
+
+### 网络配置
+
+- `websocket_url`: WebSocket连接地址
+- `rest_api_url`: REST API地址
+- `reconnect_delay`: 重连延迟（秒）
+- `timeout`: 超时时间（秒）
 
 ### 交易对配置
 
@@ -81,6 +90,7 @@ python main.py -v
   - `aggTrade`: 聚合交易流
   - `depth@0ms`: 深度数据流
   - `kline_1m`: 1分钟K线
+- `depth_snapshot`: 是否获取深度快照
 - `enabled`: 是否启用
 
 ### 性能配置
@@ -100,6 +110,26 @@ storage:
   output_directory: "./data"  # 输出目录
   file_format: "csv"          # 文件格式
   daily_rotation: true        # 按日期轮转文件
+```
+
+### 订单簿配置
+
+```yaml
+orderbook:
+  enabled: false              # 是否启用本地订单簿管理
+  max_depth: 1000           # 最大维护深度档位
+  output_interval: 10       # 订单簿状态输出间隔（秒）
+  resync_threshold: 5       # 重新同步阈值（失败次数）
+```
+
+### 日志配置
+
+```yaml
+logging:
+  level: INFO                # 日志级别：DEBUG, INFO, WARNING, ERROR
+  file: "binance_streamer.log"
+  max_file_size: 10          # MB
+  backup_count: 5            # 备份文件数量
 ```
 
 ## 数据文件
@@ -168,13 +198,14 @@ mode: production
 modes:
   production:
     run_duration: 86400  # 24小时
-    max_workers: 8       # 8个并发进程
     symbols:
       - symbol: BTCUSDT
         streams: [aggTrade, depth@0ms, kline_1m]
+        depth_snapshot: true
         enabled: true
       - symbol: ETHUSDT  
         streams: [aggTrade, depth@0ms, kline_1m]
+        depth_snapshot: true
         enabled: true
       # ... 更多交易对
 
@@ -184,6 +215,11 @@ performance:
 
 storage:
   output_directory: "/data/binance"
+
+orderbook:
+  enabled: true
+  max_depth: 1000
+  resync_threshold: 5
 ```
 
 ## 常见问题
@@ -191,8 +227,8 @@ storage:
 ### Q: 如何添加新的交易对？
 A: 编辑 `config.yaml` 文件，在对应模式的 `symbols` 列表中添加新交易对。
 
-### Q: 如何调整进程数量？
-A: 修改配置文件中的 `max_workers` 参数。建议不超过CPU核心数。
+### Q: 如何启用订单簿管理？
+A: 在配置文件中设置 `orderbook.enabled: true`。注意这会增加内存使用。
 
 ### Q: 如何处理大量数据？
 A: 增加 `queue_maxsize`，使用SSD存储，调整 `batch_size` 和 `flush_interval`。

@@ -87,6 +87,10 @@ class ConfigManager:
     def get_logging_config(self) -> Dict[str, Any]:
         """获取日志配置"""
         return self._config.get('logging', {})
+    
+    def get_orderbook_config(self) -> Dict[str, Any]:
+        """获取订单簿配置"""
+        return self._config.get('orderbook', {})
 
 # 全局配置管理器实例
 config_manager = ConfigManager()

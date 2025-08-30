@@ -28,14 +28,14 @@ def save_to_csv(df: pd.DataFrame, filename: str):
     except Exception as e:
         print(f"Error saving to {filename}: {e}")
 
-def writer_process(data_queue: multiprocessing.Queue):
+def writer_process(data_queue: multiprocessing.Queue, writer_id: int = 0):
     """A dedicated process for writing data from a queue to CSV files."""
-    print("Writer process started.")
+    print(f"Writer process {writer_id} started.")
     while True:
         try:
             item = data_queue.get()
             if item is None:
-                print("Writer process stopping.")
+                print(f"Writer process {writer_id} stopping.")
                 break
 
             stream_type, data = item
@@ -81,6 +81,29 @@ def writer_process(data_queue: multiprocessing.Queue):
                 df = pd.DataFrame([kline_data])
                 filename = get_daily_filename('kline_1m', data['data']['s'])
                 save_to_csv(df, filename)
+            elif stream_type == 'orderbook_summary':
+                # 保存订单簿摘要数据
+                import json
+                
+                orderbook_record = {
+                    'timestamp': data['timestamp'],
+                    'symbol': data['symbol'],
+                    'last_update_id': data['last_update_id'],
+                    'is_synchronized': data['is_synchronized'],
+                    'best_bid': data['best_bid'],
+                    'best_ask': data['best_ask'],
+                    'spread': data['spread'],
+                    'bids_count': data['bids_count'],
+                    'asks_count': data['asks_count'],
+                    'update_count': data['update_count'],
+                    'resync_count': data['resync_count'],
+                    'top_bids': json.dumps(data['top_bids']),  # JSON格式存储
+                    'top_asks': json.dumps(data['top_asks'])   # JSON格式存储
+                }
+                
+                orderbook_df = pd.DataFrame([orderbook_record])
+                filename = get_daily_filename('orderbook', data['symbol'])
+                save_to_csv(orderbook_df, filename)
             elif stream_type == 'depth_snapshot':
                 symbol = data['symbol']
                 storage_config = config_manager.get_storage_config()
