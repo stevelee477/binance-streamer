@@ -256,6 +256,19 @@ class ProcessManager:
                 self.writer_process.terminate()
                 self.writer_process.join()
         
+        # 清理队列资源
+        try:
+            # 清空队列中剩余的数据
+            while not self.data_queue.empty():
+                try:
+                    self.data_queue.get_nowait()
+                except:
+                    break
+            self.data_queue.close()
+            self.data_queue.join_thread()
+        except Exception as e:
+            self.logger.warning(f"清理队列资源时出错: {e}")
+        
         # 关闭订单簿管理进程
         if self.orderbook_process and self.orderbook_process.is_alive():
             self.logger.info("关闭订单簿管理进程...")

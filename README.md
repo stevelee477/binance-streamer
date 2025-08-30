@@ -67,14 +67,17 @@ uv run python -m binance_streamer.main --list-symbols
 # 详细日志输出
 uv run python -m binance_streamer.main -v
 
-# 守护进程模式运行
-uv run python -m binance_streamer.main --daemon start    # 启动守护进程
-uv run python -m binance_streamer.main --daemon stop     # 停止守护进程
-uv run python -m binance_streamer.main --daemon restart  # 重启守护进程
-uv run python -m binance_streamer.main --daemon status   # 查看守护进程状态
+# 守护进程模式运行（推荐方式，无警告）
+uv run python run.py --daemon start    # 启动守护进程
+uv run python run.py --daemon stop     # 停止守护进程
+uv run python run.py --daemon restart  # 重启守护进程
+uv run python run.py --daemon status   # 查看守护进程状态
 
 # 指定PID文件位置
-uv run python -m binance_streamer.main --daemon start --pidfile /var/run/binance-streamer.pid
+uv run python run.py --daemon start --pidfile /var/run/binance-streamer.pid
+
+# 备用方式（会有harmless警告）
+uv run python -m binance_streamer.main --daemon start
 ```
 
 ## 配置说明
@@ -197,27 +200,27 @@ Main Process
 ### 启动守护进程
 
 ```bash
-# 启动守护进程
-uv run python -m binance_streamer.main --daemon start
+# 启动守护进程（推荐方式）
+uv run python run.py --daemon start
 
 # 使用自定义配置启动
-uv run python -m binance_streamer.main --daemon start -c production_config.yaml
+uv run python run.py --daemon start -c production_config.yaml
 
 # 指定PID文件位置
-uv run python -m binance_streamer.main --daemon start --pidfile /var/run/binance-streamer.pid
+uv run python run.py --daemon start --pidfile /var/run/binance-streamer.pid
 ```
 
 ### 管理守护进程
 
 ```bash
 # 查看守护进程状态
-uv run python -m binance_streamer.main --daemon status
+uv run python run.py --daemon status
 
 # 停止守护进程
-uv run python -m binance_streamer.main --daemon stop
+uv run python run.py --daemon stop
 
 # 重启守护进程
-uv run python -m binance_streamer.main --daemon restart
+uv run python run.py --daemon restart
 ```
 
 ### 守护进程特性
@@ -305,6 +308,12 @@ A: 增加 `queue_maxsize`，使用SSD存储，调整 `batch_size` 和 `flush_int
 
 ### Q: 程序占用内存过大怎么办？
 A: 减少 `queue_maxsize`，启用 `daily_rotation`，减少同时运行的交易对数量。
+
+### Q: 运行时出现RuntimeWarning或resource_tracker警告？
+A: 这些是Python内部的harmless警告，不会影响程序功能。使用 `uv run python run.py` 替代 `uv run python -m binance_streamer.main` 可以避免RuntimeWarning。resource_tracker警告可以安全忽略。
+
+### Q: 在macOS上daemon无法启动？
+A: macOS会使用简化的daemon实现。确保有写入PID文件的权限，或指定有权限的路径：`--pidfile /tmp/binance-streamer.pid`
 
 ## 许可证
 
