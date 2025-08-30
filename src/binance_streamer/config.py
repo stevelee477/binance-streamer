@@ -91,6 +91,10 @@ class ConfigManager:
     def get_orderbook_config(self) -> Dict[str, Any]:
         """获取订单簿配置"""
         return self._config.get('orderbook', {})
+    
+    def get_daemon_config(self) -> Dict[str, Any]:
+        """获取守护进程配置"""
+        return self._config.get('daemon', {})
 
 # 全局配置管理器实例
 config_manager = ConfigManager()

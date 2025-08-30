@@ -23,6 +23,12 @@ uv run python -m binance_streamer.main --list-symbols
 
 # Run with verbose logging
 uv run python -m binance_streamer.main -v
+
+# Daemon mode operations
+uv run python -m binance_streamer.main --daemon start     # Start as daemon
+uv run python -m binance_streamer.main --daemon stop      # Stop daemon
+uv run python -m binance_streamer.main --daemon restart   # Restart daemon
+uv run python -m binance_streamer.main --daemon status    # Check daemon status
 ```
 
 ### Development

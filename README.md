@@ -66,6 +66,15 @@ uv run python -m binance_streamer.main --list-symbols
 
 # 详细日志输出
 uv run python -m binance_streamer.main -v
+
+# 守护进程模式运行
+uv run python -m binance_streamer.main --daemon start    # 启动守护进程
+uv run python -m binance_streamer.main --daemon stop     # 停止守护进程
+uv run python -m binance_streamer.main --daemon restart  # 重启守护进程
+uv run python -m binance_streamer.main --daemon status   # 查看守护进程状态
+
+# 指定PID文件位置
+uv run python -m binance_streamer.main --daemon start --pidfile /var/run/binance-streamer.pid
 ```
 
 ## 配置说明
@@ -132,6 +141,17 @@ logging:
   backup_count: 5            # 备份文件数量
 ```
 
+### 守护进程配置
+
+```yaml
+daemon:
+  pidfile: "/tmp/binance-streamer.pid"  # PID文件路径
+  user: null                            # 运行用户（null表示当前用户）
+  group: null                           # 运行组（null表示当前组）
+  working_directory: "."                # 工作目录
+  umask: 0                             # 文件创建掩码
+```
+
 ## 数据文件
 
 程序会在配置的输出目录中生成以下文件：
@@ -170,6 +190,44 @@ Main Process
 - **进程优先级**: 可设置高优先级减少调度延迟
 - **内存映射**: 大文件写入优化
 
+## 守护进程运行
+
+程序支持守护进程模式，可以在后台持续运行：
+
+### 启动守护进程
+
+```bash
+# 启动守护进程
+uv run python -m binance_streamer.main --daemon start
+
+# 使用自定义配置启动
+uv run python -m binance_streamer.main --daemon start -c production_config.yaml
+
+# 指定PID文件位置
+uv run python -m binance_streamer.main --daemon start --pidfile /var/run/binance-streamer.pid
+```
+
+### 管理守护进程
+
+```bash
+# 查看守护进程状态
+uv run python -m binance_streamer.main --daemon status
+
+# 停止守护进程
+uv run python -m binance_streamer.main --daemon stop
+
+# 重启守护进程
+uv run python -m binance_streamer.main --daemon restart
+```
+
+### 守护进程特性
+
+- **后台运行**: 程序完全脱离终端，在后台运行
+- **PID文件管理**: 自动创建和管理PID文件，防止重复启动
+- **日志文件输出**: 守护进程模式下，所有输出都重定向到日志文件
+- **信号处理**: 支持SIGTERM和SIGINT信号进行优雅关闭
+- **进程监控**: 可通过PID文件监控进程运行状态
+
 ## 监控和日志
 
 程序支持详细的日志记录：
@@ -180,6 +238,18 @@ python main.py -v
 ```
 
 日志文件：`binance_streamer.log`
+
+### 守护进程日志
+
+守护进程模式下，程序会自动将所有输出重定向到配置的日志文件。可以通过以下命令监控日志：
+
+```bash
+# 实时查看日志
+tail -f binance_streamer.log
+
+# 查看最近的日志
+tail -100 binance_streamer.log
+```
 
 ## 故障处理
 

@@ -89,3 +89,11 @@ logging:
   file: "binance_streamer.log"
   max_file_size: 10          # MB
   backup_count: 5
+
+# 守护进程配置
+daemon:
+  pidfile: "/tmp/binance-streamer.pid"  # PID文件路径
+  user: null                            # 运行用户（null表示当前用户）
+  group: null                           # 运行组（null表示当前组）
+  working_directory: "."                # 工作目录
+  umask: 0                             # 文件创建掩码

@@ -18,9 +18,13 @@ def setup_argument_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 使用示例:
-  python main.py                    # 使用默认配置文件启动
-  python main.py -c custom.yaml     # 使用自定义配置文件
-  python main.py --status           # 显示当前配置状态
+  python main.py                          # 使用默认配置文件启动
+  python main.py -c custom.yaml           # 使用自定义配置文件
+  python main.py --status                 # 显示当前配置状态
+  python main.py --daemon start           # 启动守护进程
+  python main.py --daemon stop            # 停止守护进程
+  python main.py --daemon restart         # 重启守护进程
+  python main.py --daemon status          # 查看守护进程状态
         """
     )
     
@@ -46,6 +50,18 @@ def setup_argument_parser():
         '-v', '--verbose',
         action='store_true',
         help='启用详细日志输出'
+    )
+    
+    parser.add_argument(
+        '--daemon',
+        choices=['start', 'stop', 'restart', 'status'],
+        help='守护进程控制: start|stop|restart|status'
+    )
+    
+    parser.add_argument(
+        '--pidfile',
+        default='/tmp/binance-streamer.pid',
+        help='守护进程PID文件路径 (默认: /tmp/binance-streamer.pid)'
     )
     
     return parser
@@ -112,6 +128,25 @@ def main():
             global config_manager
             from .config import ConfigManager
             config_manager = ConfigManager(args.config)
+        
+        # 处理守护进程请求
+        if args.daemon:
+            from .daemon import create_daemon
+            daemon = create_daemon(args.pidfile, args.config, args.verbose)
+            
+            if args.daemon == 'start':
+                print("启动守护进程...")
+                daemon.start()
+            elif args.daemon == 'stop':
+                print("停止守护进程...")
+                daemon.stop()
+            elif args.daemon == 'restart':
+                print("重启守护进程...")
+                daemon.restart()
+            elif args.daemon == 'status':
+                daemon.status()
+            
+            sys.exit(0)
         
         # 处理状态显示请求
         if args.status:
