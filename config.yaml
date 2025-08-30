@@ -1,0 +1,86 @@
+# Binance Streamer Configuration
+# 币安数据流配置文件
+
+# 运行模式：development 或 production
+mode: development
+
+# 模式配置
+modes:
+  development:
+    run_duration: 60   # 运行时长（秒）- 1分钟
+    max_workers: 2     # 最大工作进程数
+    symbols:
+      - symbol: BTCUSDT
+        streams:
+          - aggTrade      # 聚合交易流
+          - depth@0ms     # 深度数据流（实时）
+          - kline_1m      # 1分钟K线
+        depth_snapshot: true  # REST API深度快照
+        enabled: true
+      - symbol: ETHUSDT
+        streams:
+          - aggTrade
+          - depth@0ms
+          - kline_1m
+        depth_snapshot: true
+        enabled: true
+
+  production:
+    run_duration: 86400  # 运行时长（秒）- 24小时
+    max_workers: 4       # 最大工作进程数
+    symbols:
+      - symbol: BTCUSDT
+        streams:
+          - aggTrade      # 聚合交易流
+          - depth@0ms     # 深度数据流（实时）
+          - kline_1m      # 1分钟K线
+        depth_snapshot: true  # REST API深度快照
+        enabled: true
+      - symbol: ETHUSDT
+        streams:
+          - aggTrade
+          - depth@0ms
+          - kline_1m
+        depth_snapshot: true
+        enabled: true
+      - symbol: BNBUSDT
+        streams:
+          - aggTrade
+          - depth@0ms
+          - kline_1m
+        depth_snapshot: true
+        enabled: true
+      - symbol: SOLUSDT
+        streams:
+          - aggTrade
+          - depth@0ms
+          - kline_1m
+        depth_snapshot: true
+        enabled: true
+
+# 网络配置
+network:
+  websocket_url: "wss://fstream.binance.com/stream"
+  rest_api_url: "https://fapi.binance.com/fapi/v1"
+  reconnect_delay: 5    # 重连延迟（秒）
+  timeout: 30           # 超时时间（秒）
+
+# 数据存储配置
+storage:
+  output_directory: "./data"  # 输出目录
+  file_format: "csv"          # 文件格式
+  daily_rotation: true        # 按日期轮转文件
+
+# 性能优化配置
+performance:
+  queue_maxsize: 10000       # 队列最大大小
+  batch_size: 100            # 批量处理大小
+  flush_interval: 1          # 刷新间隔（秒）
+  process_priority: "high"   # 进程优先级：normal, high
+
+# 日志配置
+logging:
+  level: INFO                # 日志级别：DEBUG, INFO, WARNING, ERROR
+  file: "binance_streamer.log"
+  max_file_size: 10          # MB
+  backup_count: 5

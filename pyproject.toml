@@ -1,0 +1,25 @@
+[project]
+name = "binance-streamer"
+version = "0.1.0"
+description = "High-performance multiprocess Binance futures data streamer with configurable symbols"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "websockets>=11.0.0",
+    "aiohttp>=3.8.0",
+    "pandas>=1.5.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+binance-streamer = "binance_streamer.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/binance_streamer"]
+
+[tool.uv]
+dev-dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
