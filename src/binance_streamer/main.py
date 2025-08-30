@@ -131,8 +131,13 @@ def main():
         
         # 处理守护进程请求
         if args.daemon:
-            from .daemon import create_daemon
-            daemon = create_daemon(args.pidfile, args.config, args.verbose)
+            import platform
+            if platform.system() == 'Darwin':  # macOS
+                from .simple_daemon import create_simple_daemon
+                daemon = create_simple_daemon(args.pidfile, args.config, args.verbose)
+            else:  # Linux和其他Unix系统
+                from .daemon import create_daemon
+                daemon = create_daemon(args.pidfile, args.config, args.verbose)
             
             if args.daemon == 'start':
                 print("启动守护进程...")

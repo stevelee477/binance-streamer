@@ -16,7 +16,7 @@ class Daemon:
     """
     
     def __init__(self, pidfile: str, stdin: str = '/dev/null', 
-                 stdout: str = '/dev/null', stderr: str = '/dev/null'):
+                 stdout: str = None, stderr: str = None):
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
@@ -55,8 +55,16 @@ class Daemon:
         sys.stdout.flush()
         sys.stderr.flush()
         
+        # 重定向stdin
         with open(self.stdin, 'r', encoding='utf-8') as si:
             os.dup2(si.fileno(), sys.stdin.fileno())
+            
+        # 如果没有指定stdout/stderr，使用/dev/null
+        if self.stdout is None:
+            self.stdout = '/dev/null'
+        if self.stderr is None:
+            self.stderr = '/dev/null'
+            
         with open(self.stdout, 'a+', encoding='utf-8') as so:
             os.dup2(so.fileno(), sys.stdout.fileno())
         with open(self.stderr, 'a+', encoding='utf-8') as se:
@@ -203,15 +211,21 @@ class BinanceStreamerDaemon(Daemon):
         if not os.path.isabs(log_file):
             log_file = os.path.join(os.getcwd(), log_file)
             
+        # 确保日志文件目录存在
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+            
         logging.basicConfig(
             level=log_level,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler(log_file),
-            ]
+            ],
+            force=True  # 强制重新配置logging
         )
         
-        # 重定向stdout和stderr到日志文件
+        # 设置输出重定向到日志文件
         self.stdout = log_file
         self.stderr = log_file
         
