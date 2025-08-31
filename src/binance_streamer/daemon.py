@@ -20,7 +20,11 @@ class Daemon:
         self.stdin = stdin
         self.stdout = stdout
         self.stderr = stderr
-        self.pidfile = pidfile
+        # 确保PID文件使用绝对路径
+        if not os.path.isabs(pidfile):
+            self.pidfile = os.path.join(os.getcwd(), pidfile)
+        else:
+            self.pidfile = pidfile
         
     def _daemonize(self):
         """
@@ -37,7 +41,8 @@ class Daemon:
             sys.exit(1)
             
         # 从父进程环境脱离
-        os.chdir('/')
+        # 保持原工作目录，不切换到根目录（保持项目路径）
+        # os.chdir('/')  # 注释掉，保持在项目目录中
         os.setsid()
         os.umask(0)
         
@@ -168,6 +173,8 @@ class BinanceStreamerDaemon(Daemon):
         super().__init__(pidfile)
         self.config_file = config_file
         self.verbose = verbose
+        # 保存原始工作目录，用于日志和配置文件路径
+        self.original_cwd = os.getcwd()
         
     def run(self):
         """运行币安数据流收集器"""
@@ -183,7 +190,11 @@ class BinanceStreamerDaemon(Daemon):
             # 如果指定了自定义配置文件，重新初始化配置管理器
             if self.config_file != 'config.yaml':
                 from . import config
-                config.config_manager = ConfigManager(self.config_file)
+                # 确保配置文件路径正确
+                config_path = self.config_file
+                if not os.path.isabs(config_path):
+                    config_path = os.path.join(self.original_cwd, config_path)
+                config.config_manager = ConfigManager(config_path)
             
             # 配置日志到文件（daemon模式下）
             self._setup_daemon_logging()
@@ -207,9 +218,9 @@ class BinanceStreamerDaemon(Daemon):
         log_level = getattr(logging, log_config.get('level', 'INFO'))
         log_file = log_config.get('file', 'binance_streamer.log')
         
-        # 确保日志文件路径是绝对路径
+        # 确保日志文件路径是绝对路径，使用保存的原始工作目录
         if not os.path.isabs(log_file):
-            log_file = os.path.join(os.getcwd(), log_file)
+            log_file = os.path.join(self.original_cwd, log_file)
             
         # 确保日志文件目录存在
         log_dir = os.path.dirname(log_file)

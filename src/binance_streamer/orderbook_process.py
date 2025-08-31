@@ -9,7 +9,7 @@ import logging
 from typing import List
 import aiohttp
 
-def run_orderbook_manager_process(symbols: List[str], orderbook_config: dict, network_config: dict, data_queue: multiprocessing.Queue):
+def run_orderbook_manager_process(symbols: List[str], orderbook_config: dict, network_config: dict, symbol_queues: dict):
     """运行订单簿管理器进程"""
     
     # 配置日志
@@ -38,7 +38,9 @@ def run_orderbook_manager_process(symbols: List[str], orderbook_config: dict, ne
             # 创建订单簿管理器
             output_interval = orderbook_config.get('output_interval', 10)
             resync_threshold = orderbook_config.get('resync_threshold', 5)
-            orderbook_manager = OrderBookManager(symbols, output_interval, resync_threshold, data_queue)
+            # 创建汇总队列用于订单簿输出
+            orderbook_output_queue = symbol_queues.get(symbols[0], multiprocessing.Queue()) if symbols else multiprocessing.Queue()
+            orderbook_manager = OrderBookManager(symbols, output_interval, resync_threshold, orderbook_output_queue)
             orderbook_manager.start()
             
             async with aiohttp.ClientSession(

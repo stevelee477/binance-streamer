@@ -315,6 +315,13 @@ A: 这些是Python内部的harmless警告，不会影响程序功能。使用 `u
 ### Q: 在macOS上daemon无法启动？
 A: macOS会使用简化的daemon实现。确保有写入PID文件的权限，或指定有权限的路径：`--pidfile /tmp/binance-streamer.pid`
 
+### Q: 在Linux上daemon无法启动？
+A: 确保以下几点：
+1. 在项目根目录中运行程序
+2. 使用绝对路径或确保有正确的工作目录权限
+3. 确保PID文件路径可写：`--pidfile /tmp/binance-streamer.pid`
+4. 检查日志文件 `binance_streamer.log` 查看详细错误信息
+
 ## 许可证
 
 MIT License

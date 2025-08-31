@@ -10,17 +10,34 @@ import os
 
 from .config import config_manager
 from .websocket_client import binance_websocket_client
-from .data_fetcher import get_depth_snapshot
-from .file_writer import writer_process
+from .file_writer import writer_process, multi_queue_writer_process
 from .orderbook_process import run_orderbook_manager_process
 import aiohttp
 
-def _symbol_worker_process(symbol: str, streams: List[str], data_queue, network_config: Dict, performance_config: Dict):
+async def get_depth_snapshot(session, symbol: str, data_queue: multiprocessing.Queue, limit: int = 1000):
+    """Fetches depth snapshot from Binance REST API and puts it into a queue."""
+    url = f"https://fapi.binance.com/fapi/v1/depth?symbol={symbol}&limit={limit}"
+    try:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            data = await response.json()
+            
+            # Add local timestamp and symbol
+            data['localtime'] = time.time()
+            data['symbol'] = symbol
+            
+            data_queue.put(('depth_snapshot', data))
+            print(f"Depth snapshot for {symbol} fetched and sent to writer.")
+            return data
+    except aiohttp.ClientError as e:
+        print(f"An error occurred while fetching depth snapshot: {e}")
+        return None
+
+def _symbol_worker_process(symbol: str, streams: List[str], symbol_queue, network_config: Dict, performance_config: Dict):
     """单个交易对的工作进程函数（顶层函数，可被pickle序列化）"""
     
     # 在进程内部导入，避免相对导入问题
     from binance_streamer.websocket_client import binance_websocket_client
-    from binance_streamer.data_fetcher import get_depth_snapshot
     import aiohttp
     
     # 设置进程优先级
@@ -42,10 +59,10 @@ def _symbol_worker_process(symbol: str, streams: List[str], data_queue, network_
                 tasks = []
                 
                 # 获取深度快照
-                tasks.append(get_depth_snapshot(session, symbol, data_queue))
+                tasks.append(get_depth_snapshot(session, symbol, symbol_queue))
                 
                 # 启动WebSocket流
-                tasks.append(binance_websocket_client(symbol, data_queue, streams))
+                tasks.append(binance_websocket_client(symbol, symbol_queue, streams))
                 
                 await asyncio.gather(*tasks, return_exceptions=True)
                 
@@ -68,9 +85,8 @@ class ProcessManager:
         self.performance_config = config_manager.get_performance_config()
         self.orderbook_config = config_manager.get_orderbook_config()
         self.processes: List[Process] = []
-        self.data_queue = multiprocessing.Queue(
-            maxsize=self.performance_config.get('queue_maxsize', 10000)
-        )
+        # 为每个交易对创建独立队列，减少竞争
+        self.symbol_queues: Dict[str, multiprocessing.Queue] = {}
         self.writer_process = None
         self.orderbook_process = None
         self.running = False
@@ -111,9 +127,15 @@ class ProcessManager:
     
     def _start_symbol_process(self, symbol: str, streams: List[str]):
         """启动单个交易对的进程"""
+        # 为该交易对创建独立队列
+        symbol_queue = multiprocessing.Queue(
+            maxsize=self.performance_config.get('queue_maxsize', 10000)
+        )
+        self.symbol_queues[symbol] = symbol_queue
+        
         process = Process(
             target=_symbol_worker_process,
-            args=(symbol, streams, self.data_queue, self.network_config, self.performance_config),
+            args=(symbol, streams, symbol_queue, self.network_config, self.performance_config),
             name=f"symbol-{symbol}"
         )
         process.start()
@@ -130,10 +152,10 @@ class ProcessManager:
         self.logger.info("启动币安数据流收集器...")
         
         try:
-            # 启动写入进程
+            # 启动写入进程 - 现在需要处理多个队列
             self.writer_process = Process(
-                target=writer_process,
-                args=(self.data_queue,),
+                target=multi_queue_writer_process,
+                args=(self.symbol_queues,),
                 name="writer"
             )
             self.writer_process.start()
@@ -151,12 +173,12 @@ class ProcessManager:
             
             self.logger.info(f"总计启动了 {len(self.processes)} 个数据收集进程")
             
-            # 启动订单簿管理进程（如果启用）
+            # 启动订单簿管理进程（如果启用） - 需要访问所有队列
             if self.orderbook_config.get('enabled', False):
                 symbol_names = [sc.symbol for sc in enabled_symbols]
                 self.orderbook_process = Process(
                     target=run_orderbook_manager_process,
-                    args=(symbol_names, self.orderbook_config, self.network_config, self.data_queue),
+                    args=(symbol_names, self.orderbook_config, self.network_config, self.symbol_queues),
                     name="orderbook_manager"
                 )
                 self.orderbook_process.start()
@@ -201,8 +223,8 @@ class ProcessManager:
                 if self.writer_process and not self.writer_process.is_alive():
                     self.logger.error("写入进程已退出，重新启动...")
                     self.writer_process = Process(
-                        target=writer_process,
-                        args=(self.data_queue,),
+                        target=multi_queue_writer_process,
+                        args=(self.symbol_queues,),
                         name="writer"
                     )
                     self.writer_process.start()
@@ -213,7 +235,7 @@ class ProcessManager:
                     not self.orderbook_process.is_alive()):
                     self.logger.warning("订单簿管理进程已退出，不重新启动（避免频繁重启）")
                 
-                time.sleep(1)  # 监控间隔
+                time.sleep(5)  # 监控间隔 - 优化为5秒减少CPU占用
                 
         except KeyboardInterrupt:
             self.logger.info("收到中断信号，开始关闭...")
@@ -247,8 +269,12 @@ class ProcessManager:
         # 关闭写入进程
         if self.writer_process and self.writer_process.is_alive():
             self.logger.info("关闭写入进程...")
-            # 发送停止信号
-            self.data_queue.put(None)
+            # 向所有队列发送停止信号
+            for queue in self.symbol_queues.values():
+                try:
+                    queue.put(None)
+                except:
+                    pass
             self.writer_process.join(timeout=10)
             
             if self.writer_process.is_alive():
@@ -256,18 +282,19 @@ class ProcessManager:
                 self.writer_process.terminate()
                 self.writer_process.join()
         
-        # 清理队列资源
-        try:
-            # 清空队列中剩余的数据
-            while not self.data_queue.empty():
-                try:
-                    self.data_queue.get_nowait()
-                except:
-                    break
-            self.data_queue.close()
-            self.data_queue.join_thread()
-        except Exception as e:
-            self.logger.warning(f"清理队列资源时出错: {e}")
+        # 清理所有队列资源
+        for symbol, queue in self.symbol_queues.items():
+            try:
+                # 清空队列中剩余的数据
+                while not queue.empty():
+                    try:
+                        queue.get_nowait()
+                    except:
+                        break
+                queue.close()
+                queue.join_thread()
+            except Exception as e:
+                self.logger.warning(f"清理队列资源 {symbol} 时出错: {e}")
         
         # 关闭订单簿管理进程
         if self.orderbook_process and self.orderbook_process.is_alive():
@@ -290,7 +317,8 @@ class ProcessManager:
             'total_processes': len(self.processes),
             'alive_processes': len(alive_processes),
             'writer_alive': self.writer_process.is_alive() if self.writer_process else False,
-            'queue_size': self.data_queue.qsize() if hasattr(self.data_queue, 'qsize') else 'N/A'
+            'queue_sizes': {symbol: queue.qsize() if hasattr(queue, 'qsize') else 'N/A' 
+                           for symbol, queue in self.symbol_queues.items()}
         }
 
 def main():

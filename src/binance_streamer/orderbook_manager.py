@@ -9,7 +9,13 @@ import time
 import logging
 from typing import Dict, List, Optional, Tuple
 from collections import deque
+from sortedcontainers import SortedDict
 import aiohttp
+
+
+def neg(x):
+    """用于bids的降序排序"""
+    return -x
 
 
 class LocalOrderBook:
@@ -19,9 +25,10 @@ class LocalOrderBook:
         self.symbol = symbol
         self.max_depth = max_depth
         
-        # 订单簿数据 {price: quantity}
-        self.bids: Dict[float, float] = {}  # 买单，价格从高到低
-        self.asks: Dict[float, float] = {}  # 卖单，价格从低到高
+        # 使用SortedDict优化排序性能 
+        # bids按价格降序（负价格实现），asks按价格升序
+        self.bids = SortedDict(neg)  # 买单，价格从高到低（使用负值排序）
+        self.asks = SortedDict()  # 卖单，价格从低到高
         
         # 状态管理
         self.last_update_id = 0
@@ -38,8 +45,9 @@ class LocalOrderBook:
     
     def get_best_bid_ask(self) -> Tuple[Optional[float], Optional[float]]:
         """获取最佳买卖价"""
-        best_bid = max(self.bids.keys()) if self.bids else None
-        best_ask = min(self.asks.keys()) if self.asks else None
+        # SortedDict中第一个元素就是最优价格
+        best_bid = -self.bids.peekitem(0)[0] if self.bids else None  # 反转负值
+        best_ask = self.asks.peekitem(0)[0] if self.asks else None
         return best_bid, best_ask
     
     def get_spread(self) -> Optional[float]:
@@ -51,9 +59,9 @@ class LocalOrderBook:
     
     def get_depth_summary(self, levels: int = 10) -> Dict:
         """获取深度摘要"""
-        # 排序获取前N档
-        top_bids = sorted(self.bids.items(), key=lambda x: x[0], reverse=True)[:levels]
-        top_asks = sorted(self.asks.items(), key=lambda x: x[0])[:levels]
+        # SortedDict已经排序，直接取前N档
+        top_bids = [(-price, qty) for price, qty in list(self.bids.items())[:levels]]  # 恢复正价格
+        top_asks = list(self.asks.items())[:levels]
         
         best_bid, best_ask = self.get_best_bid_ask()
         spread = self.get_spread()
@@ -79,11 +87,11 @@ class LocalOrderBook:
         self.bids.clear()
         self.asks.clear()
         
-        # 初始化bids
+        # 初始化bids - 使用负价格实现降序
         for price_str, qty_str in snapshot_data['bids']:
             price, qty = float(price_str), float(qty_str)
             if qty > 0:
-                self.bids[price] = qty
+                self.bids[-price] = qty  # 存储负价格
         
         # 初始化asks  
         for price_str, qty_str in snapshot_data['asks']:
@@ -141,15 +149,16 @@ class LocalOrderBook:
     
     def _apply_updates(self, bids_updates: List, asks_updates: List):
         """应用买卖单更新"""
-        # 更新bids
+        # 更新bids - 使用负价格
         for price_str, qty_str in bids_updates:
             price, qty = float(price_str), float(qty_str)
+            neg_price = -price
             if qty == 0:
                 # 数量为0，删除该价格档位
-                self.bids.pop(price, None)
+                self.bids.pop(neg_price, None)
             else:
                 # 更新数量
-                self.bids[price] = qty
+                self.bids[neg_price] = qty
         
         # 更新asks
         for price_str, qty_str in asks_updates:
@@ -161,16 +170,16 @@ class LocalOrderBook:
                 # 更新数量
                 self.asks[price] = qty
         
-        # 限制深度，保持最优价格
+        # 限制深度 - SortedDict已经排序，直接截取
         if len(self.bids) > self.max_depth:
-            # 保留最高的max_depth个bid
-            sorted_bids = sorted(self.bids.items(), key=lambda x: x[0], reverse=True)[:self.max_depth]
-            self.bids = dict(sorted_bids)
+            # 删除最差的价格档位（SortedDict末尾）
+            while len(self.bids) > self.max_depth:
+                self.bids.popitem(-1)  # 删除最后一个（价格最低的bid）
         
         if len(self.asks) > self.max_depth:
-            # 保留最低的max_depth个ask
-            sorted_asks = sorted(self.asks.items(), key=lambda x: x[0])[:self.max_depth]
-            self.asks = dict(sorted_asks)
+            # 删除最差的价格档位（SortedDict末尾）
+            while len(self.asks) > self.max_depth:
+                self.asks.popitem(-1)  # 删除最后一个（价格最高的ask）
 
 
 class OrderBookManager:
