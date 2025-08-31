@@ -1,0 +1,11 @@
+Binance Streamer 测试结果总结
+测试时间: 2025-08-31 13:43:23
+总测试数: 5, 通过: 5, 失败: 0
+成功率: 100.0%
+总耗时: 2.09s
+
+[PASS] [unit] 优化写入功能测试 (0.54s)
+[PASS] [performance] 写入性能对比测试 (0.42s)
+[PASS] [performance] 快速优化验证测试 (0.53s)
+[PASS] [performance] 完整性能分析 (0.55s)
+[PASS] [integration] 实时系统集成测试 (0.05s)

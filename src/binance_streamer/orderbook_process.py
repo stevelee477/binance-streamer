@@ -30,7 +30,7 @@ def run_orderbook_manager_process(symbols: List[str], orderbook_config: dict, ne
         sys.path.insert(0, project_root)
     
     from src.binance_streamer.orderbook_manager import OrderBookManager
-    from src.binance_streamer.websocket_client_orderbook import binance_websocket_client_simple
+    from src.binance_streamer.websocket_client import binance_websocket_client
     
     async def run():
         """运行订单簿管理"""

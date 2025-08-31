@@ -36,8 +36,13 @@ uv run python -m binance_streamer.main --daemon start
 
 ### Development
 ```bash
-# Debug single websocket connection
-python debug_websocket.py
+# Run complete test suite
+uv run python tests/run_all_tests.py
+
+# Run specific test categories
+uv run python tests/performance/optimized_file_writer.py    # Performance tests
+uv run python tests/integration/simple_test.py             # Integration tests
+uv run python tests/unit/test_optimized_write.py           # Unit tests
 ```
 
 ## Architecture Overview
@@ -111,10 +116,26 @@ Edit `config.yaml` under the appropriate mode section and add to `symbols` list.
 3. Add stream name to symbol configuration in config.yaml
 
 ### Testing
-No formal test framework is currently set up. Manual testing involves:
-- Running with short duration in development mode
-- Checking generated CSV files in `./data/{SYMBOL}/` directories
-- Monitoring process logs in `binance_streamer.log`
+The project includes a comprehensive test suite organized in the `tests/` directory:
+
+**Test Structure:**
+- `tests/performance/` - Performance benchmarking and optimization validation
+- `tests/integration/` - End-to-end system integration tests
+- `tests/unit/` - Component-level unit tests
+
+**Running Tests:**
+```bash
+# Run all tests with comprehensive reporting
+uv run python tests/run_all_tests.py
+
+# Individual test categories
+uv run python tests/performance/optimized_file_writer.py    # File writing performance comparison
+uv run python tests/performance/quick_test_optimization.py  # Quick optimization validation
+uv run python tests/integration/simple_test.py             # Real-time data collection test
+```
+
+**Test Data:**
+Tests generate data in `./data/TEST*/` directories which can be safely deleted after testing.
 
 ### Process Communication
 All inter-process communication happens via multiprocessing.Queue. Data format is tuples of `(stream_type, data)` where stream_type determines how writer process handles the data.
