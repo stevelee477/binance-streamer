@@ -90,6 +90,7 @@ class ProcessManager:
         self.writer_process = None
         self.orderbook_process = None
         self.running = False
+        self.shutdown_called = False  # 防止重复调用shutdown
         
         # 设置信号处理
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -126,21 +127,9 @@ class ProcessManager:
     
     
     def _start_symbol_process(self, symbol: str, streams: List[str]):
-        """启动单个交易对的进程"""
-        # 为该交易对创建独立队列
-        symbol_queue = multiprocessing.Queue(
-            maxsize=self.performance_config.get('queue_maxsize', 10000)
-        )
-        self.symbol_queues[symbol] = symbol_queue
-        
-        process = Process(
-            target=_symbol_worker_process,
-            args=(symbol, streams, symbol_queue, self.network_config, self.performance_config),
-            name=f"symbol-{symbol}"
-        )
-        process.start()
-        self.processes.append(process)
-        self.logger.info(f"已启动 {symbol} 进程，PID: {process.pid}")
+        """启动单个交易对的进程 - 已移至start()方法中"""
+        # This method is now obsolete but kept for compatibility
+        pass
     
     def start(self):
         """启动所有进程"""
@@ -152,7 +141,18 @@ class ProcessManager:
         self.logger.info("启动币安数据流收集器...")
         
         try:
-            # 启动写入进程 - 现在需要处理多个队列
+            # 先获取所有启用的交易对
+            enabled_symbols = [sc for sc in self.config.symbols if sc.enabled]
+            self.logger.info(f"发现 {len(enabled_symbols)} 个启用的交易对")
+            
+            # 为每个交易对创建队列
+            for symbol_config in enabled_symbols:
+                symbol_queue = multiprocessing.Queue(
+                    maxsize=self.performance_config.get('queue_maxsize', 10000)
+                )
+                self.symbol_queues[symbol_config.symbol] = symbol_queue
+            
+            # 启动写入进程 - 现在symbol_queues已经填充好了
             self.writer_process = Process(
                 target=multi_queue_writer_process,
                 args=(self.symbol_queues,),
@@ -162,14 +162,17 @@ class ProcessManager:
             self.logger.info(f"已启动写入进程，PID: {self.writer_process.pid}")
             
             # 启动所有启用的交易对进程
-            enabled_symbols = [sc for sc in self.config.symbols if sc.enabled]
-            self.logger.info(f"发现 {len(enabled_symbols)} 个启用的交易对")
-            
             for symbol_config in enabled_symbols:
-                self._start_symbol_process(
-                    symbol_config.symbol,
-                    symbol_config.streams
+                process = Process(
+                    target=_symbol_worker_process,
+                    args=(symbol_config.symbol, symbol_config.streams, 
+                          self.symbol_queues[symbol_config.symbol], 
+                          self.network_config, self.performance_config),
+                    name=f"symbol-{symbol_config.symbol}"
                 )
+                process.start()
+                self.processes.append(process)
+                self.logger.info(f"已启动 {symbol_config.symbol} 进程，PID: {process.pid}")
             
             self.logger.info(f"总计启动了 {len(self.processes)} 个数据收集进程")
             
@@ -244,9 +247,10 @@ class ProcessManager:
     
     def shutdown(self):
         """关闭所有进程"""
-        if not self.running:
+        if not self.running or self.shutdown_called:
             return
         
+        self.shutdown_called = True
         self.running = False
         self.logger.info("开始关闭所有进程...")
         
@@ -266,21 +270,25 @@ class ProcessManager:
             except Exception as e:
                 self.logger.error(f"关闭进程 {process.name} 时出错: {e}")
         
-        # 关闭写入进程
+        # 关闭写入进程 - 必须在数据收集进程关闭后进行
         if self.writer_process and self.writer_process.is_alive():
             self.logger.info("关闭写入进程...")
             # 向所有队列发送停止信号
-            for queue in self.symbol_queues.values():
+            for symbol, queue in self.symbol_queues.items():
                 try:
-                    queue.put(None)
+                    queue.put(None, timeout=1)  # 使用timeout避免阻塞
                 except:
                     pass
+            
+            # 给写入进程时间处理剩余数据
             self.writer_process.join(timeout=10)
             
             if self.writer_process.is_alive():
                 self.logger.warning("强制终止写入进程")
                 self.writer_process.terminate()
-                self.writer_process.join()
+                self.writer_process.join(timeout=5)
+                if self.writer_process.is_alive():
+                    self.writer_process.kill()
         
         # 清理所有队列资源
         for symbol, queue in self.symbol_queues.items():
@@ -291,10 +299,15 @@ class ProcessManager:
                         queue.get_nowait()
                     except:
                         break
+                # 关闭队列
                 queue.close()
+                # 等待后台线程结束
                 queue.join_thread()
             except Exception as e:
-                self.logger.warning(f"清理队列资源 {symbol} 时出错: {e}")
+                self.logger.debug(f"清理队列 {symbol} 时出现预期内错误: {e}")
+        
+        # 清空队列字典
+        self.symbol_queues.clear()
         
         # 关闭订单簿管理进程
         if self.orderbook_process and self.orderbook_process.is_alive():
@@ -323,12 +336,24 @@ class ProcessManager:
 
 def main():
     """主函数"""
+    # 使用spawn方法避免一些资源泄漏问题
+    try:
+        multiprocessing.set_start_method('spawn')
+    except RuntimeError:
+        pass  # 已经设置过
+    
     manager = ProcessManager()
     try:
         manager.start()
     except Exception as e:
         logging.error(f"程序异常: {e}")
         sys.exit(1)
+    finally:
+        # 确保总是调用shutdown
+        manager.shutdown()
+        # 强制垃圾回收
+        import gc
+        gc.collect()
 
 if __name__ == "__main__":
     main()

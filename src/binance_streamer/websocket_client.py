@@ -12,13 +12,12 @@ async def binance_websocket_client(symbol: str, data_queue: multiprocessing.Queu
     # 构建流名称列表
     stream_names = []
     for stream in streams:
-        if stream == 'aggTrade':
-            stream_names.append(f"{symbol.lower()}@aggTrade")
-        elif stream == 'depth@0ms':
-            stream_names.append(f"{symbol.lower()}@depth@0ms")
-        elif stream == 'kline_1m':
-            stream_names.append(f"{symbol.lower()}@kline_1m")
+        # Handle streams that already contain @ (like depth@0ms)
+        if '@' in stream:
+            # depth@0ms -> btcusdt@depth@0ms
+            stream_names.append(f"{symbol.lower()}@{stream}")
         else:
+            # aggTrade -> btcusdt@aggTrade
             stream_names.append(f"{symbol.lower()}@{stream}")
     
     url = f"wss://fstream.binance.com/stream?streams={'/'.join(stream_names)}"

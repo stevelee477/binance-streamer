@@ -161,7 +161,7 @@ def multi_queue_writer_process(symbol_queues: Dict[str, multiprocessing.Queue], 
     多队列写入进程，支持批量处理以提高性能
     减少DataFrame创建次数和磁盘I/O操作
     """
-    print(f"Multi-queue writer process {writer_id} started.")
+    print(f"Multi-queue writer process {writer_id} started with {len(symbol_queues)} symbol queues")
     
     # 获取性能配置
     performance_config = config_manager.get_performance_config()
@@ -202,8 +202,18 @@ def multi_queue_writer_process(symbol_queues: Dict[str, multiprocessing.Queue], 
         
         last_flush = current_time
     
+    # 跟踪收到停止信号的队列
+    stop_signals_received = set()
+    total_queues = len(symbol_queues)
+    
     while True:
         try:
+            # 如果所有队列都收到了停止信号，退出循环
+            if len(stop_signals_received) >= total_queues and total_queues > 0:
+                print(f"Writer process {writer_id} received stop signals from all {total_queues} queues, shutting down...")
+                flush_batches()  # 最后一次刷新所有缓冲数据
+                break
+                
             # 检查是否需要基于时间刷新
             current_time = time.time()
             if current_time - last_flush >= flush_interval:
@@ -218,6 +228,7 @@ def multi_queue_writer_process(symbol_queues: Dict[str, multiprocessing.Queue], 
                     item = data_queue.get_nowait()
                     if item is None:
                         print(f"Writer process {writer_id} received stop signal from {symbol}.")
+                        stop_signals_received.add(symbol)
                         continue
                     
                     stream_type, data = item
@@ -260,6 +271,18 @@ def multi_queue_writer_process(symbol_queues: Dict[str, multiprocessing.Queue], 
             break
         except Exception as e:
             print(f"An error occurred in the multi-queue writer process: {e}")
+    
+    # 清理队列资源，避免semaphore泄漏
+    for symbol, q in symbol_queues.items():
+        try:
+            # 清空队列中剩余的数据
+            while True:
+                try:
+                    q.get_nowait()
+                except:
+                    break
+        except:
+            pass
             
     print(f"Multi-queue writer process {writer_id} shutting down.")
 
